@@ -50,6 +50,22 @@ class MirrorFactoryTest {
     }
 
     @Test
+    void create_kaliFamily() {
+        AppConfig cfg = new AppConfig();
+        cfg.setBaseUrl("rsync://example.com/");
+        cfg.setDistros(new java.util.LinkedHashMap<>(java.util.Map.of(
+            "kali", new AppConfig.DistroConfig("kali/", "kali", true)
+        )));
+        ConfigManager cm = new ConfigManager(cfg);
+        LogManager logger = new LogManager(Path.of("/tmp/logs"));
+        MirrorFactory factory = new MirrorFactory(cm, logger);
+
+        IMirror mirror = factory.create("kali");
+        assertNotNull(mirror);
+        assertEquals("kali", mirror.getName());
+    }
+
+    @Test
     void createAll_skipsDisabled() {
         AppConfig cfg = new AppConfig();
         cfg.setBaseUrl("rsync://example.com/");

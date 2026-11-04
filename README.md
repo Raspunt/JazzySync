@@ -1,6 +1,6 @@
 # JazzySync — Linux Mirror Sync
 
-A CLI tool (`jazzy`) for managing local Linux distribution mirrors through a single TOML configuration. Supports **Arch Linux**, **Debian**, and **Fedora**.
+A CLI tool (`jazzy`) for managing local Linux distribution mirrors through a single TOML configuration. Supports **Arch Linux**, **Debian**, **Fedora**, and **Kali Linux**.
 
 > **What it actually is:** a Java orchestrator that runs `rsync` (and optionally `debmirror`) based on your config. It does **not** generate repository metadata, merge repositories, or fix broken upstream mirrors.
 
@@ -31,7 +31,7 @@ A CLI tool (`jazzy`) for managing local Linux distribution mirrors through a sin
 ```
 config.toml ──► ConfigManager ──► MirrorFactory ──► IMirror
                                                     ├── ArchMirror ──► rsync
-                                                    ├── DebianMirror ──► debmirror (or rsync)
+                                                    ├── DebianMirror ──► debmirror (or rsync)   (debian, kali)
                                                     └── FedoraMirror ──► rsync
 ```
 
@@ -51,6 +51,7 @@ config.toml ──► ConfigManager ──► MirrorFactory ──► IMirror
 | **Arch Linux** | `rsync` (`zstd` optional for verify) |
 | **Debian** | `rsync` (`debmirror`, `dpkg-deb`/`ar` optional) |
 | **Fedora** | `rsync` (`rpm` optional for verify) |
+| **Kali Linux** | same as Debian |
 
 ### Build dependencies (only if building from source)
 
@@ -185,6 +186,12 @@ family = "fedora"
 enabled = true
 repos = ["Everything"]
 excludes = ["Everything/aarch64", "Everything/x86_64/debug"]
+
+[distros.kali]
+sourcePath = "kali/"
+baseUrl = "rsync://mirror.truenetwork.ru/"   # mirror.yandex.ru has no Kali
+enabled = true
+repos = ["main", "contrib", "non-free", "non-free-firmware"]
 ```
 
 ### Configuration fields
@@ -202,11 +209,11 @@ excludes = ["Everything/aarch64", "Everything/x86_64/debug"]
 | `sourcePath` | Path on the rsync server (single source) | All |
 | `sourcePaths` | List of paths for multi-source sync | Any distro |
 | `enabled` | Enable or disable this distribution | All |
-| `repos` | Whitelist/filters (Arch: repo names; Debian: sections; Fedora: editions) | All |
+| `repos` | Whitelist/filters (Arch: repo names; Debian/Kali: sections; Fedora: editions) | All |
 | `excludes` | Paths to exclude from sync (supports subdirectories inside included repos) | All |
 | `baseUrl` | Override global `baseUrl` for this distribution only | All |
 | `family` | Mirror family/provider to use (e.g. `"fedora"` for custom distro names) | All |
-| `properties` | Extra key-value settings (Debian: host, root, dist, arch, section) | Debian only |
+| `properties` | Extra key-value settings (`dist`, `arch`, `section`) | Debian, Kali |
 
 ### Per-distribution mirror override
 
@@ -303,6 +310,13 @@ Both will appear in `jazzy list` and sync with `jazzy sync all`.
 - If `debmirror` is installed, it is used automatically. Otherwise falls back to plain `rsync`
 - Integrity checks: `dpkg-deb -I` or `ar x` + `tar tf`
 
+### Kali Linux
+- Uses the same code path as Debian (`debmirror` or `rsync` fallback, `.deb` integrity checks)
+- Defaults: `dist = "kali-rolling"`, `arch = "amd64"`, sections `main, contrib, non-free, non-free-firmware`
+- Override via `[distros.kali.properties]`, e.g. `dist = "kali-last-snapshot"`
+- `mirror.yandex.ru` does not carry Kali — set `baseUrl` to a mirror that does (e.g. `rsync://mirror.truenetwork.ru/`, module `kali`)
+- Without `debmirror` the rsync fallback copies the **whole** archive (all architectures and dists), so installing `debmirror` is strongly recommended
+
 ### Fedora
 - **No pre-sync update detection** — always runs rsync (but skips if `repomd.xml` is unchanged)
 - `repos` acts as `rsync --include` filters on the top-level directories inside `sourcePath`
@@ -382,7 +396,7 @@ jazzy list
 ```
 IMirror (interface)
 ├── ArchMirror    → RsyncStrategy
-├── DebianMirror  → DebmirrorStrategy (or RsyncStrategy fallback)
+├── DebianMirror  → DebmirrorStrategy (or RsyncStrategy fallback)  — used by debian and kali families
 └── FedoraMirror  → RsyncStrategy
 ```
 

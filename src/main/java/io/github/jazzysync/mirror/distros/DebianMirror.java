@@ -25,14 +25,27 @@ public class DebianMirror extends AbstractMirror {
 
     public DebianMirror(String sourceUrl, String dist, String arch, String section,
                         Path targetDir, LogManager logger, List<String> repos) {
-        super("debian", targetDir, logger,
-              buildSyncStrategy(dist, arch, section),
-              buildCheckers(logger));
+        this("debian", sourceUrl, dist, arch, section, targetDir, logger, repos);
+    }
+
+    public DebianMirror(String name, String sourceUrl, String dist, String arch, String section,
+                        Path targetDir, LogManager logger, List<String> repos) {
+        super(name, targetDir, logger,
+              buildSyncStrategy(dist, arch, effectiveSection(section, repos)),
+              buildCheckers(logger, name));
         this.sourceUrl = sourceUrl;
         this.dist = dist;
         this.arch = arch;
-        this.section = section;
+        this.section = effectiveSection(section, repos);
         this.repos = repos != null ? repos : List.of();
+    }
+
+    /** `repos` from the config overrides the `section` property (as documented in README). */
+    private static String effectiveSection(String section, List<String> repos) {
+        if (repos != null && !repos.isEmpty()) {
+            return String.join(",", repos);
+        }
+        return section;
     }
 
     private static SyncStrategy buildSyncStrategy(String dist, String arch, String section) {
@@ -50,9 +63,9 @@ public class DebianMirror extends AbstractMirror {
         return new RsyncStrategy();
     }
 
-    private static List<IntegrityChecker> buildCheckers(LogManager logger) {
+    private static List<IntegrityChecker> buildCheckers(LogManager logger, String name) {
         List<IntegrityChecker> checkers = new ArrayList<>();
-        var dpkgChecker = new ExternalToolChecker(List.of("dpkg-deb", "-I"), 60, logger, "debian");
+        var dpkgChecker = new ExternalToolChecker(List.of("dpkg-deb", "-I"), 60, logger, name);
         if (dpkgChecker.isAvailable()) {
             checkers.add(dpkgChecker);
         }
@@ -77,7 +90,7 @@ public class DebianMirror extends AbstractMirror {
 
     @Override
     public void syncRepo() {
-        logger.info("[" + name + "] syncing Debian " + dist + "...");
+        logger.info("[" + name + "] syncing " + dist + "...");
         try {
             ensureTargetDir();
             List<String> cmd = syncStrategy.buildSyncCommand(sourceUrl, targetDir);
@@ -95,7 +108,7 @@ public class DebianMirror extends AbstractMirror {
 
     @Override
     public void checkRepo() {
-        logger.info("[" + name + "] checking Debian " + dist + " for updates...");
+        logger.info("[" + name + "] checking " + dist + " for updates...");
         try {
             List<String> cmd = syncStrategy.buildCheckCommand(sourceUrl, targetDir);
             ProcessResult result = runProcess(cmd, 60);
@@ -141,7 +154,7 @@ public class DebianMirror extends AbstractMirror {
                 for (Path p : bad) {
                     logger.warn("  CORRUPT: " + p);
                 }
-                logger.warn("[" + name + "] run 'jazzy fix debian' to remove and re-download them");
+                logger.warn("[" + name + "] run 'jazzy fix " + name + "' to remove and re-download them");
                 logPackageWord(bad.size());
             }
         } catch (IOException e) {

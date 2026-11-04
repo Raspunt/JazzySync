@@ -1,6 +1,6 @@
 # Client Setup Guide
 
-This guide shows how to configure **pacman** (Arch Linux), **apt** (Debian/Ubuntu), and **dnf** (Fedora) to use a local mirror served over **HTTP** or the local filesystem (`file://`).
+This guide shows how to configure **pacman** (Arch Linux), **apt** (Debian/Ubuntu/Kali), and **dnf** (Fedora) to use a local mirror served over **HTTP** or the local filesystem (`file://`).
 
 > **Replace `192.168.1.22`** with the actual IP address or hostname of your mirror server.
 
@@ -15,6 +15,7 @@ The examples below assume the following layout on the server (as created by Jazz
 | **Arch Linux** | `http://192.168.1.22/archlinux/` | `/mnt/big/mirrors/archlinux/` |
 | **Debian** | `http://192.168.1.22/debian/` | `/mnt/big/mirrors/debian/` |
 | **Fedora** | `http://192.168.1.22/fedora/` | `/mnt/big/mirrors/fedora/` |
+| **Kali Linux** | `http://192.168.1.22/kali/` | `/mnt/big/mirrors/kali/` |
 | **Fedora Updates** | `http://192.168.1.22/fedora-updates/` | `/mnt/big/mirrors/fedora-updates/` |
 
 If the mirror is mounted locally (e.g. via NFS), use `file://` with the local mount point instead.
@@ -89,6 +90,23 @@ sudo apt update
 ```
 
 > **Important:** when using `file://`, apt may complain about missing `Release.gpg`. If you synced without GPG signatures (`debmirror --ignore-release-gpg`), either configure apt with `Acquire::AllowInsecureRepositories "true"` or ensure `Release.gpg` is present.
+
+---
+
+## Kali Linux (apt)
+
+Replace the contents of `/etc/apt/sources.list`:
+
+```bash
+sudo tee /etc/apt/sources.list << 'EOF'
+deb http://192.168.1.22/kali kali-rolling main contrib non-free non-free-firmware
+EOF
+sudo apt update
+```
+
+Or via local path: `deb file:///mnt/data6/mirrors/kali kali-rolling main contrib non-free non-free-firmware`.
+
+The same note about `Release.gpg` as for Debian applies.
 
 ---
 

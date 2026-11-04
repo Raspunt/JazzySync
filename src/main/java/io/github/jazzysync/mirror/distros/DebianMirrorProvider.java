@@ -22,6 +22,6 @@ public class DebianMirrorProvider implements MirrorProvider {
         java.nio.file.Path targetDir = config.getDistroTarget(name);
         var repos = config.getDistroRepos(name);
 
-        return new DebianMirror(sourceUrl, dist, arch, section, targetDir, logger, repos);
+        return new DebianMirror(name, sourceUrl, dist, arch, section, targetDir, logger, repos);
     }
 }

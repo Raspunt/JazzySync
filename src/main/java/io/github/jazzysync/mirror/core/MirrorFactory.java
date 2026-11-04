@@ -4,6 +4,7 @@ import io.github.jazzysync.mirror.api.*;
 import io.github.jazzysync.mirror.distros.ArchMirrorProvider;
 import io.github.jazzysync.mirror.distros.DebianMirrorProvider;
 import io.github.jazzysync.mirror.distros.FedoraMirrorProvider;
+import io.github.jazzysync.mirror.distros.KaliMirrorProvider;
 
 import io.github.jazzysync.config.ConfigManager;
 import io.github.jazzysync.logging.LogManager;
@@ -27,6 +28,7 @@ public class MirrorFactory {
         providers.add(new ArchMirrorProvider());
         providers.add(new DebianMirrorProvider());
         providers.add(new FedoraMirrorProvider());
+        providers.add(new KaliMirrorProvider());
     }
 
     public void register(MirrorProvider provider) {

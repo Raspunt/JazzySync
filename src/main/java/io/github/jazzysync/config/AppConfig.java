@@ -7,11 +7,19 @@ public class AppConfig {
     private String baseUrl;
     private String targetDir = "~/mirrors";
     private String logDir = "~/.cache/jazzy";
-    private java.util.LinkedHashMap<String, DistroConfig> distros = new java.util.LinkedHashMap<>(Map.of(
-            "arch", new DistroConfig("archlinux/", "arch", true),
-            "debian", new DistroConfig("debian/", "debian", true),
-            "fedora", new DistroConfig("fedora/linux/releases/44/Everything/x86_64/os/", "fedora", true)
-    ));
+    private java.util.LinkedHashMap<String, DistroConfig> distros = defaultDistros();
+
+    private static java.util.LinkedHashMap<String, DistroConfig> defaultDistros() {
+        var d = new java.util.LinkedHashMap<String, DistroConfig>();
+        d.put("arch", new DistroConfig("archlinux/", "arch", true));
+        d.put("debian", new DistroConfig("debian/", "debian", true));
+        d.put("fedora", new DistroConfig("fedora/linux/releases/44/Everything/x86_64/os/", "fedora", true));
+        // Disabled by default: mirror.yandex.ru has no Kali, so it needs its own mirror
+        DistroConfig kali = new DistroConfig("kali/", "kali", false);
+        kali.setBaseUrl("rsync://mirror.truenetwork.ru/");
+        d.put("kali", kali);
+        return d;
+    }
 
     public String getBaseUrl() { return baseUrl; }
     public void setBaseUrl(String baseUrl) { this.baseUrl = baseUrl; }
