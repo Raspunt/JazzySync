@@ -9,7 +9,12 @@ MAIN   := io.github.jazzysync.Main
 # Цель по умолчанию
 all: package
 
-JAVA_HOME ?= /usr/lib/jvm/java-21-openjdk
+# sudo drops JAVA_HOME, so if it is unset or has no jlink, pick the first JDK 21+ in /usr/lib/jvm
+ifeq ($(and $(JAVA_HOME),$(wildcard $(JAVA_HOME)/bin/jlink)),)
+JAVA_HOME := $(shell for d in /usr/lib/jvm/java-21-openjdk /usr/lib/jvm/*; do \
+	[ -x "$$d/bin/jlink" ] && "$$d/bin/java" -version 2>&1 | grep -qE 'version "(2[1-9]|[3-9][0-9])' && { echo "$$d"; break; }; \
+	done)
+endif
 JLINK     ?= $(JAVA_HOME)/bin/jlink
 JDEPS     ?= $(JAVA_HOME)/bin/jdeps
 DIST_JAR  := dist/jazzy.jar

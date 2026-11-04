@@ -30,7 +30,11 @@ public class ConfigManager {
     }
 
     public ConfigManager(String targetDirOverride) {
-        this.config = loadOrCreateConfig();
+        this(loadOrCreateConfig(), targetDirOverride);
+    }
+
+    public ConfigManager(AppConfig config, String targetDirOverride) {
+        this.config = config;
         this.targetDir = expandHome(targetDirOverride);
         this.logDir = expandHome(config.getLogDir());
     }

@@ -34,7 +34,7 @@ class ConfigManagerTest {
 
     @Test
     void getDistroTarget_withOverride() {
-        ConfigManager cm = new ConfigManager("/opt/mirrors");
+        ConfigManager cm = new ConfigManager(createTestConfig(), "/opt/mirrors");
         assertEquals(Path.of("/opt/mirrors/archlinux"), cm.getDistroTarget("arch"));
     }
 
