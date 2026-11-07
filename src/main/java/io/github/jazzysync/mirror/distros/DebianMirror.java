@@ -5,6 +5,7 @@ import io.github.jazzysync.mirror.core.*;
 import io.github.jazzysync.mirror.strategies.*;
 import io.github.jazzysync.mirror.checkers.*;
 
+import io.github.jazzysync.config.ConfigManager;
 import io.github.jazzysync.logging.LogManager;
 
 import java.io.IOException;
@@ -22,6 +23,8 @@ public class DebianMirror extends AbstractMirror {
     private final String arch;
     private final String section;
     private final List<String> repos;
+    private final int retries;
+    private final int retryDelaySeconds;
 
     public DebianMirror(String sourceUrl, String dist, String arch, String section,
                         Path targetDir, LogManager logger, List<String> repos) {
@@ -30,14 +33,46 @@ public class DebianMirror extends AbstractMirror {
 
     public DebianMirror(String name, String sourceUrl, String dist, String arch, String section,
                         Path targetDir, LogManager logger, List<String> repos) {
+        this(name, sourceUrl, dist, arch, section, "rsync", 0, 0, targetDir, logger, repos);
+    }
+
+    public DebianMirror(String name, String sourceUrl, String dist, String arch, String section,
+                        String method, int retries, int retryDelaySeconds,
+                        Path targetDir, LogManager logger, List<String> repos) {
         super(name, targetDir, logger,
-              buildSyncStrategy(dist, arch, effectiveSection(section, repos)),
+              buildSyncStrategy(dist, arch, effectiveSection(section, repos), method),
               buildCheckers(logger, name));
         this.sourceUrl = sourceUrl;
         this.dist = dist;
         this.arch = arch;
         this.section = effectiveSection(section, repos);
         this.repos = repos != null ? repos : List.of();
+        this.retries = Math.max(0, retries);
+        this.retryDelaySeconds = Math.max(0, retryDelaySeconds);
+    }
+
+    /**
+     * Builds a Debian-style mirror from config. Properties: dist, arch, section,
+     * method (rsync|http|https|ftp, default rsync), retries (default 5), retryDelay (seconds, default 60).
+     */
+    public static DebianMirror fromConfig(String name, ConfigManager config, LogManager logger, String defaultDist) {
+        String dist = config.getDistroProperty(name, "dist", defaultDist);
+        String arch = config.getDistroProperty(name, "arch", "amd64");
+        String section = config.getDistroProperty(name, "section", "main,contrib,non-free,non-free-firmware");
+        String method = config.getDistroProperty(name, "method", "rsync");
+        int retries = parseInt(config.getDistroProperty(name, "retries", "5"), 5);
+        int retryDelay = parseInt(config.getDistroProperty(name, "retryDelay", "60"), 60);
+        return new DebianMirror(name, config.getDistroSourceUrl(name), dist, arch, section,
+                                method, retries, retryDelay,
+                                config.getDistroTarget(name), logger, config.getDistroRepos(name));
+    }
+
+    private static int parseInt(String value, int fallback) {
+        try {
+            return Integer.parseInt(value.trim());
+        } catch (NumberFormatException e) {
+            return fallback;
+        }
     }
 
     /** `repos` from the config overrides the `section` property (as documented in README). */
@@ -48,14 +83,14 @@ public class DebianMirror extends AbstractMirror {
         return section;
     }
 
-    private static SyncStrategy buildSyncStrategy(String dist, String arch, String section) {
+    private static SyncStrategy buildSyncStrategy(String dist, String arch, String section, String method) {
         try {
             ProcessBuilder pb = new ProcessBuilder("sh", "-c", "command -v debmirror");
             pb.redirectErrorStream(true);
             Process p = pb.start();
             boolean finished = p.waitFor(5, java.util.concurrent.TimeUnit.SECONDS);
             if (finished && p.exitValue() == 0) {
-                return new DebmirrorStrategy(dist, arch, section);
+                return new DebmirrorStrategy(dist, arch, section, method);
             }
         } catch (Exception e) {
             // debmirror not available
@@ -94,11 +129,24 @@ public class DebianMirror extends AbstractMirror {
         try {
             ensureTargetDir();
             List<String> cmd = syncStrategy.buildSyncCommand(sourceUrl, targetDir);
-            ProcessResult result = runProcess(cmd, 180);
-            if (result.exitCode() == 0) {
-                logger.info("[" + name + "] done");
-            } else {
+            // Mirrors sometimes drop long transfers ("Connection reset by peer").
+            // Files already fetched are kept, so each retry resumes where the last one stopped.
+            for (int attempt = 0; ; attempt++) {
+                ProcessResult result = runProcess(cmd, 180);
+                if (result.exitCode() == 0) {
+                    logger.info("[" + name + "] done");
+                    return;
+                }
                 logger.error("[" + name + "] Synchronization failed with exit code: " + result.exitCode());
+                if (attempt >= retries) {
+                    if (retries > 0) {
+                        logger.error("[" + name + "] giving up after " + (retries + 1) + " attempts");
+                    }
+                    return;
+                }
+                logger.warn("[" + name + "] retrying in " + retryDelaySeconds + "s (attempt "
+                            + (attempt + 2) + " of " + (retries + 1) + ")");
+                Thread.sleep(retryDelaySeconds * 1000L);
             }
         } catch (IOException | InterruptedException e) {
             logger.error("[" + name + "] Synchronization error: " + e.getMessage());

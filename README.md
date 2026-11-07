@@ -213,7 +213,23 @@ repos = ["main", "contrib", "non-free", "non-free-firmware"]
 | `excludes` | Paths to exclude from sync (supports subdirectories inside included repos) | All |
 | `baseUrl` | Override global `baseUrl` for this distribution only | All |
 | `family` | Mirror family/provider to use (e.g. `"fedora"` for custom distro names) | All |
-| `properties` | Extra key-value settings (`dist`, `arch`, `section`) | Debian, Kali |
+| `properties` | Extra key-value settings: `dist`, `arch`, `section`, `method` (`rsync`/`http`/`https`/`ftp`, default `rsync`), `retries` (default `5`), `retryDelay` (seconds, default `60`) | Debian, Kali |
+
+### Retries and download method (Debian, Kali)
+
+Some mirrors drop long transfers (`Connection reset by peer`). If debmirror fails, jazzy runs it again up to `retries` times, waiting `retryDelay` seconds between attempts. Files already downloaded are kept, so every retry resumes where the previous one stopped.
+
+Use `method = "http"` for hosts without rsync, for example the official security archive:
+
+```toml
+[distros.debian13-security]
+baseUrl = "http://security.debian.org/"
+sourcePath = "debian-security/"
+family = "debian"
+[distros.debian13-security.properties]
+dist = "trixie-security"
+method = "http"
+```
 
 ### Per-distribution mirror override
 

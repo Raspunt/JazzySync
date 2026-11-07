@@ -11,11 +11,18 @@ public class DebmirrorStrategy implements SyncStrategy {
     private final String dist;
     private final String arch;
     private final String section;
+    private final String method;
 
     public DebmirrorStrategy(String dist, String arch, String section) {
+        this(dist, arch, section, "rsync");
+    }
+
+    /** method: rsync, http, https or ftp (passed to debmirror --method). */
+    public DebmirrorStrategy(String dist, String arch, String section, String method) {
         this.dist = dist;
         this.arch = arch;
         this.section = section;
+        this.method = method == null || method.isBlank() ? "rsync" : method;
     }
 
     @Override
@@ -53,7 +60,7 @@ public class DebmirrorStrategy implements SyncStrategy {
             "debmirror",
             "--host=" + host,
             "--root=" + root,
-            "--method=rsync",
+            "--method=" + method,
             "--dist=" + dist,
             "--arch=" + arch,
             "--section=" + section,
@@ -63,6 +70,10 @@ public class DebmirrorStrategy implements SyncStrategy {
             "--ignore-release-gpg",
             targetDir.toString()
         ));
+        if (!"rsync".equals(method)) {
+            // by default debmirror still fetches doc/trace dirs over rsync, which http-only hosts lack
+            cmd.add(cmd.size() - 1, "--rsync-extra=none");
+        }
         if (dryRun) {
             cmd.add("--dry-run");
         }
