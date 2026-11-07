@@ -4,6 +4,7 @@ import io.github.jazzysync.mirror.api.*;
 import io.github.jazzysync.mirror.core.*;
 import io.github.jazzysync.mirror.strategies.*;
 import io.github.jazzysync.mirror.checkers.*;
+import io.github.jazzysync.mirror.metadata.ArchDbParser;
 
 import io.github.jazzysync.logging.LogManager;
 
@@ -125,7 +126,17 @@ public class ArchMirror extends AbstractMirror {
     }
 
     @Override
+    protected MetadataParser metadataParser() {
+        return new ArchDbParser();
+    }
+
+    @Override
     public void verifyRepo() {
+        List<HashVerifier.Finding> findings = verifyAgainstIndex();
+        if (findings != null) {
+            reportFindings(findings, "arch");
+            return;
+        }
         Path pool = targetDir.resolve("pool");
         if (!Files.isDirectory(pool)) {
             logger.error("[" + name + "] error: " + pool + " not found");
@@ -166,6 +177,28 @@ public class ArchMirror extends AbstractMirror {
 
     @Override
     public void fixRepo() {
+        List<HashVerifier.Finding> findings = verifyAgainstIndex();
+        if (findings != null) {
+            if (findings.isEmpty()) {
+                logger.info("[" + name + "] all packages match the index, nothing to fix");
+                return;
+            }
+            reportFindings(findings, "arch");
+            try {
+                removeCorrupt(findings, ".sig");
+                logger.info("[" + name + "] re-downloading missing packages...");
+                // Call rsync directly: syncRepo() skips when lastupdate already matches upstream.
+                ProcessResult result = runProcess(syncStrategy.buildSyncCommand(sourceUrl, targetDir), 120);
+                if (result.exitCode() == 0) {
+                    logger.info("[" + name + "] fix done, run 'jazzy verify arch' to confirm");
+                } else {
+                    logger.error("[" + name + "] fix re-download failed");
+                }
+            } catch (IOException | InterruptedException e) {
+                logger.error("[" + name + "] Fix error: " + e.getMessage());
+            }
+            return;
+        }
         Path pool = targetDir.resolve("pool");
         if (!Files.isDirectory(pool)) {
             logger.error("[" + name + "] error: " + pool + " not found");

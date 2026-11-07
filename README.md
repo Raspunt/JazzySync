@@ -12,7 +12,8 @@ A CLI tool (`jazzy`) for managing local Linux distribution mirrors through a sin
 - Reads one TOML config and runs the right external tool (`rsync` / `debmirror`) for each distribution
 - Filters what to sync: Arch repos, Debian sections, Fedora editions
 - Checks integrity of downloaded packages after sync (`zstd`, `dpkg-deb`, `rpm`)
-- Removes corrupt packages and re-downloads them (`jazzy fix`)
+- Verifies Debian, Kali and Arch mirrors against the repository indexes: finds missing files and checks size + SHA256 of the rest (`jazzy verify`)
+- Removes corrupt packages and re-downloads them together with missing ones (`jazzy fix`)
 - Supports per-distribution mirror overrides (`baseUrl` inside distro config)
 - Supports custom distribution entries (e.g. `fedora-updates`) via `family`
 - Bundles a minimal JRE via `jlink` — no Java installation required on target systems
@@ -49,7 +50,7 @@ config.toml ──► ConfigManager ──► MirrorFactory ──► IMirror
 | Mirror | Required tools |
 |--------|---------------|
 | **Arch Linux** | `rsync` (`zstd` optional for verify) |
-| **Debian** | `rsync` (`debmirror`, `dpkg-deb`/`ar` optional) |
+| **Debian** | `rsync`, `xz` for `Packages.xz` indexes (`debmirror`, `dpkg-deb`/`ar` optional) |
 | **Fedora** | `rsync` (`rpm` optional for verify) |
 | **Kali Linux** | same as Debian |
 
@@ -373,8 +374,8 @@ Options:
 |---------|-------------|-------|
 | `sync` | Synchronize mirror(s) with upstream | ⚠️ Modifies files |
 | `check` | Dry-run; show what would change | ✅ Read-only |
-| `verify` | Verify integrity of local packages | ✅ Read-only |
-| `fix` | Remove corrupt packages and re-download | ⚠️ Deletes bad files |
+| `verify` | Check every package listed in the repo index: missing, wrong size, wrong SHA256 | ✅ Read-only |
+| `fix` | Remove corrupt packages and re-download them and the missing ones | ⚠️ Deletes bad files |
 | `status` | Show mirror status, size, last sync | ✅ Read-only |
 | `list` | List configured distributions | ✅ Read-only |
 
@@ -395,6 +396,16 @@ jazzy verify debian
 
 # Fix corrupt Arch packages
 jazzy fix arch
+```
+
+`verify` and `fix` read `dists/<dist>/*/binary-*/Packages` (Debian, Kali) or
+`<repo>/os/x86_64/<repo>.db` (Arch) and check every listed file for presence,
+size and SHA256. It reads the whole mirror, so expect it to take a while on large
+mirrors. Without an index they fall back to `dpkg-deb -I` / `zstd -t`.
+Don't run `fix` while a sync of the same mirror is in progress: half-downloaded
+files would be deleted.
+
+```bash
 
 # Show status table
 jazzy status

@@ -1,6 +1,7 @@
 package io.github.jazzysync.mirror.core;
 
 import io.github.jazzysync.mirror.api.*;
+import io.github.jazzysync.mirror.checkers.HashVerifier;
 
 import io.github.jazzysync.logging.LogManager;
 
@@ -12,6 +13,7 @@ import java.nio.file.Path;
 import java.time.Instant;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Map;
 import java.util.concurrent.TimeUnit;
 
 public abstract class AbstractMirror implements IMirror {
@@ -130,6 +132,65 @@ public abstract class AbstractMirror implements IMirror {
     protected abstract Path getLastSyncFile();
     protected abstract String checkUpToDateStatus();
     protected abstract String getReposDisplay();
+
+    /** Parser for this mirror's repository indexes, or null if it has none. */
+    protected MetadataParser metadataParser() {
+        return null;
+    }
+
+    /**
+     * Checks every file listed in the repository indexes for presence, size and SHA256.
+     * Returns null when there is no readable index, so callers can fall back to other checks.
+     */
+    protected List<HashVerifier.Finding> verifyAgainstIndex() {
+        MetadataParser parser = metadataParser();
+        if (parser == null) return null;
+        Map<Path, ExpectedFile> expected;
+        try {
+            expected = parser.parse(targetDir);
+        } catch (IOException | RuntimeException e) {
+            logger.error("[" + name + "] cannot read repository index: " + e.getMessage());
+            return null;
+        }
+        if (expected.isEmpty()) {
+            logger.warn("[" + name + "] no repository index found in " + targetDir);
+            return null;
+        }
+        logger.info("[" + name + "] checking " + expected.size() + " package(s) against the index (size + SHA256)...");
+        return new HashVerifier(name).verify(expected);
+    }
+
+    /** Logs the findings of {@link #verifyAgainstIndex()}. */
+    protected void reportFindings(List<HashVerifier.Finding> findings, String fixTarget) {
+        if (findings.isEmpty()) {
+            logger.info("[" + name + "] all packages match the index");
+            return;
+        }
+        long missing = findings.stream().filter(f -> f.problem() == HashVerifier.Problem.MISSING).count();
+        long corrupt = findings.size() - missing;
+        for (HashVerifier.Finding f : findings) {
+            String tag = switch (f.problem()) {
+                case MISSING -> "MISSING";
+                case SIZE -> "BAD SIZE";
+                case SHA256 -> "BAD SHA256";
+            };
+            logger.warn("  " + tag + ": " + f.file());
+        }
+        logger.warn("[" + name + "] " + missing + " missing, " + corrupt + " corrupt");
+        logger.warn("[" + name + "] run 'jazzy fix " + fixTarget + "' to remove and re-download them");
+    }
+
+    /** Deletes the corrupt files among the findings (missing ones are already gone). */
+    protected void removeCorrupt(List<HashVerifier.Finding> findings, String... siblingSuffixes) throws IOException {
+        for (HashVerifier.Finding f : findings) {
+            if (f.problem() == HashVerifier.Problem.MISSING) continue;
+            logger.info("[" + name + "] REMOVING: " + f.file());
+            Files.deleteIfExists(f.file());
+            for (String suffix : siblingSuffixes) {
+                Files.deleteIfExists(Path.of(f.file() + suffix));
+            }
+        }
+    }
 
     protected List<Path> verifyWithCheckers(List<Path> files) {
         for (IntegrityChecker checker : integrityCheckers) {

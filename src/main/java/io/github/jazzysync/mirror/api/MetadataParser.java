@@ -1,18 +1,13 @@
 package io.github.jazzysync.mirror.api;
 
+import java.io.IOException;
 import java.nio.file.Path;
 import java.util.Map;
 
 public interface MetadataParser {
     /**
-     * Parse metadata and return map of file paths to their expected hashes.
-     * Key: relative or absolute path to package file
-     * Value: expected hash (hex string)
+     * Reads the repository indexes under {@code repoRoot} and returns every package file
+     * they list, keyed by absolute path. Returns an empty map when no index is found.
      */
-    Map<Path, String> parseHashes(Path repoRoot);
-
-    /**
-     * Algorithm used for hashes (e.g. "SHA256", "SHA512", "BLAKE2B")
-     */
-    String getHashAlgorithm();
+    Map<Path, ExpectedFile> parse(Path repoRoot) throws IOException;
 }

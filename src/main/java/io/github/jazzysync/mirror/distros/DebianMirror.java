@@ -4,6 +4,7 @@ import io.github.jazzysync.mirror.api.*;
 import io.github.jazzysync.mirror.core.*;
 import io.github.jazzysync.mirror.strategies.*;
 import io.github.jazzysync.mirror.checkers.*;
+import io.github.jazzysync.mirror.metadata.DebianIndexParser;
 
 import io.github.jazzysync.config.ConfigManager;
 import io.github.jazzysync.logging.LogManager;
@@ -171,7 +172,17 @@ public class DebianMirror extends AbstractMirror {
     }
 
     @Override
+    protected MetadataParser metadataParser() {
+        return new DebianIndexParser(dist);
+    }
+
+    @Override
     public void verifyRepo() {
+        List<HashVerifier.Finding> findings = verifyAgainstIndex();
+        if (findings != null) {
+            reportFindings(findings, name);
+            return;
+        }
         Path pool = targetDir.resolve("pool");
         if (!Files.isDirectory(pool)) {
             logger.error("[" + name + "] error: " + pool + " not found");
@@ -212,6 +223,24 @@ public class DebianMirror extends AbstractMirror {
 
     @Override
     public void fixRepo() {
+        List<HashVerifier.Finding> findings = verifyAgainstIndex();
+        if (findings != null) {
+            if (findings.isEmpty()) {
+                logger.info("[" + name + "] all packages match the index, nothing to fix");
+                return;
+            }
+            reportFindings(findings, name);
+            try {
+                removeCorrupt(findings);
+            } catch (IOException e) {
+                logger.error("[" + name + "] Fix error: " + e.getMessage());
+                return;
+            }
+            logger.info("[" + name + "] re-downloading missing packages...");
+            syncRepo();
+            logger.info("[" + name + "] fix done, run 'jazzy verify " + name + "' to confirm");
+            return;
+        }
         Path pool = targetDir.resolve("pool");
         if (!Files.isDirectory(pool)) {
             logger.error("[" + name + "] error: " + pool + " not found");
